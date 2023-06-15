@@ -9,8 +9,8 @@ static char Usage[30];
 typedef struct Context {
     unsigned int shiftCount;
     bool isNeg;
-    FILE *CurrFile;
-    FILE *TempFile;
+    FILE *currFile;
+    FILE *tempFile;
 } Context;
 
 uint getShiftValue(char *str) {
@@ -30,6 +30,20 @@ int writeToFile(FILE *temp, char *buff) {
     return 0;
 }
 
+void openFiles(Context *ctx, char **argv) {
+    FILE* file = fopen(argv[1], "rb");
+    if (file == NULL) {
+        fprintf(stderr, "No such file or directory.\n%s", Usage);
+        exit(EXIT_FAILURE);
+    }
+    FILE* tmpFile = fopen("temp.file", "a");
+    if (tmpFile == NULL) {
+        fprintf(stderr, "Failed to create temp file.\n%s", Usage);
+        exit(EXIT_FAILURE);
+    }
+    ctx->currFile = file, ctx->tempFile = tmpFile;
+}
+
 void readBites(FILE *file){ //debug func for read bites;
     int byte;
     while ((byte = fgetc(file)) != EOF) {
@@ -38,11 +52,11 @@ void readBites(FILE *file){ //debug func for read bites;
         }
         printf(" ");
     }
-    printf("\n\n\n\n\n");
+    printf("\n\n\n");
 };
 
 
-void ruleCheck(int argc, char **argv, Context *ctx) {
+void ruleCheck(Context *ctx, int argc, char **argv) {
     if (argc != 3) {
         fprintf(stderr, argc > 3 ? "Too many args.\n%s" : "Too few args.\n%s", Usage);
         exit(EXIT_FAILURE);
@@ -60,22 +74,25 @@ void ruleCheck(int argc, char **argv, Context *ctx) {
 }
 
 void circularShift(char* buff, size_t size, Context *ctx) {
-    uint byte_shift = ctx->shiftCount / 8;
-    uint bit_shift = ctx->shiftCount % 8;
+    uint byteShift = ctx->shiftCount / 8;
+    uint bitShift = ctx->shiftCount % 8;
+    if (ctx->isNeg == true) {
+        byteShift = (size - byteShift) % size;
+    }
     char* temp = (char*)malloc(size);
     memcpy(temp, buff, size);
     for (size_t i = 0; i < size; i++) {
-        uint index = (i + byte_shift) % size;
+        uint index = (i + byteShift) % size;
         char byte = temp[index];
         char shifted_byte;
-        if (ctx->isNeg == false) {
-            shifted_byte = (byte << bit_shift) | (byte >> (8 - bit_shift));
+        if (ctx->isNeg == true) {
+            shifted_byte = (byte << bitShift) | (byte >> (8 - bitShift));
         } else {
-            shifted_byte = (byte >> bit_shift) | (byte << (8 - bit_shift));
+            shifted_byte = (byte >> bitShift) | (byte << (8 - bitShift));
         }
         buff[i] = shifted_byte;
     }
-    writeToFile(ctx->TempFile, buff);
+    writeToFile(ctx->tempFile, buff);
     free(temp);
 }
 
@@ -83,43 +100,29 @@ void circularShift(char* buff, size_t size, Context *ctx) {
 int main(int argc, char **argv) {
     Context ctx;
     sprintf(Usage, "Usage: %s file.any shiftCount", argv[0]);
-    ruleCheck(argc, argv, &ctx);
-    FILE* file = fopen(argv[1], "rb");
-    if (file == NULL) {
-        fprintf(stderr, "No such file or directory.\n%s", Usage);
-        exit(EXIT_FAILURE);
-    }
-    FILE* tmpFile = fopen("temp.file", "a");
-    if (tmpFile == NULL) {
-        fprintf(stderr, "Failed to create temp file.\n%s", Usage);
-        exit(EXIT_FAILURE);
-    }
-    ctx.CurrFile = file, ctx.TempFile = tmpFile;
-    char buff[2048] = {0};
+    ruleCheck(&ctx, argc, argv);
+    char buff[2048] = {0}, temp[1] = {0};
     size_t bRead = 0;
-    while  ((bRead = fread(buff, 1, 2048, file)) > 0) {
-        circularShift(buff, bRead, &ctx);
+    while  ((bRead = fread(buff, 1, 2048, ctx.currFile)) > 0) {
+        circularShift(buff, bRead - 1, &ctx);
     }
-    fclose((ctx.CurrFile));
-    fclose(ctx.TempFile);
-    file = fopen(argv[1], "r");
-    if (file == NULL) {
+    fclose((ctx.currFile));
+    fclose(ctx.tempFile);
+    ctx.currFile = fopen(argv[1], "r");
+    if (ctx.currFile == NULL) {
         fprintf(stderr, "No such file or directory.\n%s", Usage);
         exit(EXIT_FAILURE);
     }
-    tmpFile = fopen("temp.file", "r");
-    if (tmpFile == NULL) {
+    ctx.tempFile = fopen("temp.file", "r");
+    if (ctx.tempFile == NULL) {
         fprintf(stderr, "Failed to create temp file.\n%s", Usage);
         exit(EXIT_FAILURE);
     }
-    readBites(file);
-    readBites(tmpFile);
-    fclose((ctx.CurrFile));
-    fclose(ctx.TempFile);
+    readBites(ctx.currFile);
+    readBites(ctx.tempFile);
+    fclose((ctx.currFile));
+    fclose(ctx.tempFile);
+//    rename(argv[1], "")
+    remove("temp.file");
 }
-
-//
-//int RenameFile() {
-//
-//}
 
