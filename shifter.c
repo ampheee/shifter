@@ -7,11 +7,12 @@
 static char Usage[30];
 
 typedef struct Context {
-    unsigned int shiftCount;
+    size_t shiftCount;
     bool isNegShift;
     FILE *currFile;
     FILE *tempFile;
     char tempByte;
+    bool isEnd;
 } Context;
 
 void getTempByte(Context *ctx) {
@@ -38,15 +39,17 @@ uint getShiftValue(char *str) {
     return res;
 }
 
-int writeToFile(FILE *temp, char *buff) {
-    fprintf(temp, "%s", buff);
-    return 0;
-}
 
 void openFiles(Context *ctx, char **argv) {
     FILE* file = fopen(argv[1], "rb");
     if (file == NULL) {
         fprintf(stderr, "No such file or directory.\n%s", Usage);
+        exit(EXIT_FAILURE);
+    }
+    fseek (file, 0, SEEK_END);
+    size_t size = ftell(file);
+    if (size == 0) {
+        fprintf(stderr, "File is empty.\n%s", Usage);
         exit(EXIT_FAILURE);
     }
     FILE* tmpFile = fopen("temp.file", "wb");
@@ -57,7 +60,7 @@ void openFiles(Context *ctx, char **argv) {
     ctx->currFile = file, ctx->tempFile = tmpFile;
 }
 
-void readBites(FILE *file){ //debug func for read bites;
+void readBitesFromFile(FILE *file){ //debug func for read bites;
     int byte;
     while ((byte = fgetc(file)) != EOF) {
         for (int i = 7; i >= 0; i--) {
@@ -65,8 +68,16 @@ void readBites(FILE *file){ //debug func for read bites;
         }
         printf(" ");
     }
-    printf("\n\n\n");
-};
+    printf("\n");
+}
+
+void readBitesFromByte(char byte) {
+    for (int i = 7; i >= 0; i--) {
+        printf("%d", (byte >> i) & 1);
+    }
+    printf(" ");
+    printf("\n");
+}
 
 void ruleCheck(Context *ctx, int argc, char **argv) {
     if (argc != 3) {
@@ -87,51 +98,58 @@ void ruleCheck(Context *ctx, int argc, char **argv) {
 
 //size_t count
 void circularShift(char* buff, size_t size, Context *ctx, size_t count) {
-    uint byteShift = ctx->shiftCount / 8;
-    uint bitShift = ctx->shiftCount % 8;
-    if (ctx->isNegShift == true) {
-        byteShift = (size - byteShift) % size;
-    }
-    char* temp = (char*)malloc(size);
+    size_t bitShift = ctx->shiftCount;
+    char *temp = (char*)calloc(size, 1);
     memcpy(temp, buff, size);
     for (size_t i = 0; i < size; i++) {
-        uint index = (i + byteShift) % size;
-        char byte = temp[index];
-        char shifted_byte;
-        if (ctx->isNegShift == false) {
-            shifted_byte =  (byte >> bitShift) | temp[(i + size - 1) % size] << (8 - bitShift);
+        uint index = i;
+        unsigned char byte = temp[index];
+        unsigned char shifted_byte = 0;
+        uint index_neighbor = ctx->isNegShift ? (index + 1) % size : (index + size - 1) % size;
+        unsigned char byte_neighbor = temp[index_neighbor];
+        if (ctx->isNegShift == true) {
+            shifted_byte = (byte << bitShift) | (byte_neighbor >> (8 - bitShift));
+            if (i == size - 1 && ctx->isEnd) {
+                shifted_byte = byte << bitShift | (ctx->tempByte >> (8 - bitShift));
+            }
         } else {
-            shifted_byte = (byte << bitShift) | temp[(i + 1) % size] >> (8 - bitShift);
+            shifted_byte = (byte >> bitShift) | (byte_neighbor << (8 - bitShift));
+            if (i == 0 && count == 0) {
+                shifted_byte = byte >> bitShift | (ctx->tempByte << (8 - bitShift));
+            }
         }
-        buff[i] = shifted_byte;
+        buff[index] = shifted_byte;
     }
-//    if (ctx->isNegShift == false && count == 0) {
-//        buff[0] |= ctx->tempByte << (8 - bitShift);
-//    }
-    writeToFile(ctx->tempFile, buff);
+    fprintf(ctx->tempFile, "%s" , buff);
+    ctx->tempByte = temp[ctx->isNegShift ? size - 1 : 0];
     free(temp);
 }
 
-
 int main(int argc, char **argv) {
-    Context ctx;
+    Context ctx = {0};
     sprintf(Usage, "Usage: %s file.any shiftCount", argv[0]);
     ruleCheck(&ctx, argc, argv);
     char buff[2048] = {0};
     openFiles(&ctx, argv);
     getTempByte(&ctx);
+//    readBitesFromByte(ctx.tempByte);
     size_t bRead = 0, count = 0;
     while  ((bRead = fread(buff, 1, 2048, ctx.currFile)) > 0) {
-        circularShift(buff, bRead - 1, &ctx, count);
+        if (bRead > 0 && bRead < 2048) {
+            ctx.isEnd = true;
+        }
+        circularShift(buff, bRead, &ctx, count);
         count++;
     }
     fclose(ctx.tempFile);
     fseek(ctx.currFile, 0, SEEK_SET);
     ctx.tempFile = fopen("temp.file", "r");
-    readBites(ctx.currFile);
-    readBites(ctx.tempFile);
-
-//    rename(argv[1], "")
-    remove("temp.file");
+    readBitesFromFile(ctx.currFile);
+    readBitesFromFile(ctx.tempFile);
+    fclose(ctx.currFile);
+    remove(argv[1]);
+    rename("temp.file", argv[1]);
+    fprintf(stderr, "Success!.");
+    exit(EXIT_SUCCESS);
 }
 
