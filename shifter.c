@@ -81,35 +81,32 @@ unsigned int getShiftValue(char *str) {
 void circularShift(char* buff, size_t size, Context *ctx, size_t count) {
     char *temp = (char*)calloc(size, 1);
     memcpy(temp, buff, size);
-    ctx->shiftCount %= 8;
-    size_t shiftByte = ctx->shiftCount / 8;
     for (size_t index = 0; index < size; index++) {
-        index = (index + shiftByte) % size;
         unsigned char byte = temp[index];
-        unsigned char shifted_byte = 0;
+        unsigned char shiftedByte = 0;
         unsigned int index_neighbor = ctx->isNegShift ? (index + 1) % size : (index + size - 1) % size;
         unsigned char byte_neighbor = temp[index_neighbor];
         if (ctx->isNegShift == true) {
             if (index == size - 1 && ctx->isEnd == true) {
-                shifted_byte = byte << ctx->shiftCount | (ctx->lastByte >> (8 - ctx->shiftCount));
-                fwrite(&shifted_byte, 1, 1, ctx->tempFile);
+                shiftedByte = byte << ctx->shiftCount | (ctx->lastByte >> (8 - ctx->shiftCount));
+                fwrite(&shiftedByte, 1, 1, ctx->tempFile);
                 break;
             }
             if (index == size - 1) {
                 ctx->tempByte = byte;
             }
             if (index == 0 && count != 0) {
-                shifted_byte = ctx->tempByte << (ctx->shiftCount) | byte >> (8 - ctx->shiftCount);
-                fwrite(&shifted_byte, 1, 1, ctx->tempFile);
+                shiftedByte = ctx->tempByte << (ctx->shiftCount) | byte >> (8 - ctx->shiftCount);
+                fwrite(&shiftedByte, 1, 1, ctx->tempFile);
             }
             if (index != size - 1)  {
-                shifted_byte = byte << ctx->shiftCount | byte_neighbor >> (8 - ctx->shiftCount);
-                fwrite(&shifted_byte, 1, 1, ctx->tempFile);
+                shiftedByte = byte << ctx->shiftCount | byte_neighbor >> (8 - ctx->shiftCount);
+                fwrite(&shiftedByte, 1, 1, ctx->tempFile);
             }
         } else {
-            shifted_byte = byte >> ctx->shiftCount | (ctx->tempByte << (8 - ctx->shiftCount));
+            shiftedByte = byte >> ctx->shiftCount | (ctx->tempByte << (8 - ctx->shiftCount));
             ctx->tempByte = byte;
-            fwrite(&shifted_byte, 1, 1, ctx->tempFile);
+            fwrite(&shiftedByte, 1, 1, ctx->tempFile);
         }
     }
     free(temp);
